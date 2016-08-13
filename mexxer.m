@@ -1,6 +1,8 @@
-function [lhs,rhs] = mexxer(filename)
+function [lhs,rhs] = mexxer(filename,overwrite)
 %MEXXER Create template/interface of C code from MATLAB file.
 %   MEXXER(FILENAME) generates C code from .m file FILENAME.
+%
+%   MEXXER(FILENAME,1) overwrites the output file if it already exists.
 
 % Copyright (C) 2016 Luigi Acerbi
 %
@@ -11,6 +13,10 @@ function [lhs,rhs] = mexxer(filename)
 %   Author:     Luigi Acerbi
 %   Email:      luigi.acerbi@gmail.com
 %   Version:    14/Aug/2016 (beta)
+
+if nargin < 2 || isempty(overwrite); overwrite = 0; end
+
+mexxerver = 'v0.1';
 
 % Open input file
 [~,name,ext] = fileparts(filename);
@@ -69,10 +75,31 @@ rhs = buildargstruct(rhs_list,rhssize,rhstype,'input');
 lhs = buildargstruct(lhs_list,lhssize,lhstype,'output');
 allargs = [lhs,rhs];
 
+% Find free variables (input array sizes)
+inputvars = {rhs.name};
+freevars = [];
+for i = 1:nrhs
+    n = numel(rhs(i).sizes);
+    rhs(i).getsize = zeros(1,n);
+    if n == 1; continue; end     % Scalar, nothing interesting
+    for j = 1:n
+        s = rhs(i).sizes{j};
+        if isfinite(str2double(s)); continue; end   % Constant
+        rhs(i).vars{j} = strread(regexprep(s,'[,()\[\] *+/=-]',' '),'%s');
+        for k = 1:numel(rhs(i).vars{j})
+            if any(strcmp(inputvars,rhs(i).vars{j}{k})); continue; end
+            freevars{end+1} = rhs(i).vars{j}{k};
+            if numel(rhs(i).vars{j}) == 1; rhs(i).getsize(k) = 1; end 
+        end
+    end
+end
+freevars = unique(freevars);
+freevars_defined = zeros(1,numel(freevars));
+
 fileout = [funcname '_mex.c'];
 fout = fopen(fileout,'w');
-if exist(fileout,'file')
-    % error([filename ' already exists. Aborting.']);
+if exist(fileout,'file') && ~overwrite
+    error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
 end
 
 
@@ -87,7 +114,10 @@ fprintf(fout, ['/*\n * ' fileout '\n *\n']);
 for i = 1:numel(desc)
     fprintf(fout, ' *%s\n', desc{i});
 end
-fprintf(fout, [' *\n */\n\n']);
+% fprintf(fout, [' *\n */\n\n']);
+
+% Timestamp and info
+fprintf(fout, ' *\n * This is a MEX-file for MATLAB.\n * Template C code generated on %s with MEXXER %s \n * (https://github.com/lacerbi/mexxer).\n*/\n\n', date, mexxerver);
 
 % Macros and definitions
 fprintf(fout, '/* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */\n#define ARGSCHECK 1\n\n');
@@ -102,10 +132,15 @@ for i = 1:nrhs
     if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
     fprintf(fout, '%s%s %s%s', prefix, rhs(i).type, repmat('*',[1,rhs(i).pointer]), rhs(i).name);
 end
+for i = 1:numel(freevars)
+    if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+    fprintf(fout, '%smwSize %s', prefix, freevars{i});    
+end
 fprintf(fout,' )\n{\n\t\n\t/* Write your main calculations here... */\n\t\n}\n\n');
 
 % Main function
 fprintf(fout, '/* the gateway function */\n');
+
 fprintf(fout, 'void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )\n{\n');
 
 vartypes = unique({allargs.type});
@@ -121,14 +156,39 @@ for i = 1:numel(vartypes)
     end
     fprintf(fout,';\n');    
 end
+
+% Add vector arrays for input and output arrays sizes
+first = 1;
+for i = 1:nrhs
+    n = numel(rhs(i).sizes);
+    if any(rhs(i).getsize) && n > 1
+        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+        fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
+    end
+end
+for i = 1:nlhs
+    n = numel(lhs(i).sizes);
+    if n > 2
+        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+        fprintf(fout, '%sdims_%s[%d]', prefix, lhs(i).name, n);
+    end
+end
+if first == 0; fprintf(fout,';\n'); end
+
+% Free variables (matrix sizes)
+for i = 1:numel(freevars)
+    if i == 1; fprintf(fout, '\tmwSize'); prefix = ' '; else prefix = ', '; end
+    fprintf(fout,'%s%s',prefix,freevars{i});
+    if i == numel(freevars); fprintf(fout, ';\n'); end
+end
 fprintf(fout,'\n');
 
 % Check for number of arguments (this is always done)
 fprintf(fout,'\t/*  check for proper number of arguments */\n\t/* NOTE: You do not need an else statement when using mexErrMsgIdAndTxt\n\t   within an if statement, because it will never get to the else\n\t   statement if mexErrMsgIdAndTxt is executed. (mexErrMsgIdAndTxt breaks\n\t   you out of the MEX-file) */\n');
 fprintf(fout,'\tif ( nrhs<%d || nrhs>%d )\n', nrhs, nrhs); 
-fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumInputs",\n\t\t\t"%s inputs required.");\n', funcname, number(nrhs,1));
+fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumInputs",\n\t\t\t"%s inputs required.");\n', funcname, cardinal(nrhs,1));
 fprintf(fout,'\tif ( nlhs<%d || nlhs>%d )\n', nlhs, nlhs); 
-fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumOutputs",\n\t\t\t"%s outputs required.");\n\n', funcname, number(nlhs,1));
+fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumOutputs",\n\t\t\t"%s outputs required.");\n\n', funcname, cardinal(nlhs,1));
 
 % Get inputs
 for i = 1:nrhs
@@ -136,20 +196,39 @@ for i = 1:nrhs
     if strcmp(rhs(i).sizes{1},'scalar')
         fprintf(fout,'\t%s = (%s) mxGetScalar(prhs[%d]);\n\n', rhs(i).name, rhs(i).fulltype, i-1);
     else
-        fprintf(fout,'\t%s = (%s) mxGetPr(prhs[%d]);\n\n', rhs(i).name, rhs(i).fulltype, i-1);
+        fprintf(fout,'\t%s = (%s) mxGetPr(prhs[%d]);\n', rhs(i).name, rhs(i).fulltype, i-1);
+        if any(rhs(i).getsize)
+            fprintf(fout, '\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+            % Check if any free variable needs to be read here
+            for j = 1:numel(rhs(i).vars)
+                if numel(rhs(i).vars{j}) > 1; continue; end
+                idx = find(strcmp(rhs(i).vars{j},freevars),1);
+                if isempty(idx) || freevars_defined(idx); continue; end
+                fprintf(fout, '\t%s = dims_%s[%d];\n', freevars{idx}, rhs(i).name, j-1);
+                freevars_defined(idx) = 1;
+            end
+        end
+        fprintf(fout,'\n');
     end
 end
 
 % Do input argument checking
-fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip this part) */\n\tif ( ARGSCHECK ) {\n');
+fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */\n\tif ( ARGSCHECK ) {\n');
 first = 1;
 for i = 1:nrhs
     if strcmp(rhs(i).sizes{1},'scalar')
         if first; first = 0; else fprintf(fout,'\n'); end
         fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) || (mxGetN(prhs[%d])*mxGetM(prhs[%d])!=1) )\n', i-1, i-1, i-1, i-1);
         fprintf(fout,'\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotScalar", "Input %s must be a scalar.");\n', funcname, rhs(i).name, upper(rhs(i).name));
-    %else
-    %    fprintf(fout,'\t%s = (%s) mxGetPr(prhs[%d]);\n\n', rhs(i).name, rhs(i).fulltype, i-1);
+    else
+        if first; first = 0; else fprintf(fout,'\n'); end
+        if all(rhs(i).getsize == 0)
+            fprintf(fout, '\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+        end
+        fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) )\n\t\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotReal", "Input %s must be real.");\n', i-1, i-1, funcname, rhs(i).name, upper(rhs(i).name));
+        for k = 1:numel(rhs(i).sizes)
+            fprintf(fout,'\t\tif ( dims_%s[%d] != ((mwSize) (%s)) )\n\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sWrongSize", "The %s dimension of input %s has the wrong size (should be %s).");\n', rhs(i).name, k-1, rhs(i).sizes{k}, funcname, rhs(i).name, ordinal(k), upper(rhs(i).name), rhs(i).sizes{k});
+        end        
     end
 end
 fprintf(fout,'\t}\n\n');
@@ -162,9 +241,9 @@ for i = 1:nlhs
         case 1
             fprintf(fout,'\tplhs[%d] = mxCreateDoubleScalar(0.);\n', i-1);            
         case 2
-            fprintf(fout,'\tplhs[%d] = mxCreateDoubleMatrix((mwSize) 1, (mwSize) 1, mxREAL);\n', i-1);
+            fprintf(fout,'\tplhs[%d] = mxCreateDoubleMatrix((mwSize) (%s), (mwSize) (%s), mxREAL);\n', i-1, lhs(i).sizes{1}, lhs(i).sizes{2});
         case 3
-            for j = 1:n; fprintf(fout, '\tdims_%s[%d] = (mwSignedIndex) (%s);\n', lhs(i).name, j-1, lhs(i).sizes{j}); end
+            for j = 1:n; fprintf(fout, '\tdims_%s[%d] = (mwSize) (%s);\n', lhs(i).name, j-1, lhs(i).sizes{j}); end
             fprintf(fout,'\tplhs[%d] = mxCreateNumericArray(%d, dims_%s, mxDOUBLE_CLASS, mxREAL);\n', i-1, n, lhs(i).name);
     end
     fprintf(fout,'\t%s = mxGetPr(plhs[%d]);\n\n', lhs(i).name, i-1);
@@ -180,9 +259,14 @@ for i = 1:nrhs
     if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
     fprintf(fout, '%s%s', prefix, rhs(i).name);
 end
+for i = 1:numel(freevars)
+    if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+    fprintf(fout, '%s%s', prefix, freevars{i});    
+end
 fprintf(fout, ');\n\n');
 
 fprintf(fout,'}\n');
+
 fclose(fout);
 
 
@@ -325,14 +409,11 @@ end
 function argdescription(arg,n,section,fout)
 %ARGDESCRIPTION Write argument description
 
-ordinal = {'1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th', ...
-    '11th','12th','13th','14th','15th','16th','17th','18th','19th','20th'};
-
 switch lower(section)
     case 'input'
-        fprintf(fout,'\t/* Get %s input (', ordinal{n});
+        fprintf(fout,'\t/* Get %s input (', ordinal(n));
     case 'output'
-        fprintf(fout,'\t/* Pointer to %s output (', ordinal{n});
+        fprintf(fout,'\t/* Pointer to %s output (', ordinal(n));
 end
 fprintf(fout,'%s, ', upper(arg.name));
 
@@ -345,8 +426,8 @@ fprintf(fout,' %s) */\n', arg.type);
 end
 
 %--------------------------------------------------------------------------
-function s = number(n,firstupper)
-%NUMBER Return a string with an number
+function s = cardinal(n,firstupper)
+%CARDINAL Return a string with a cardinal number
 if nargin < 2 || isempty(firstupper); firstupper = 0; end
 
 switch n
@@ -362,6 +443,32 @@ switch n
     case 9; s = 'nine';
     case 10; s = 'ten';
     otherwise; s = num2str(n);
+end
+if firstupper; s(1) = upper(s(1)); end
+
+end
+
+%--------------------------------------------------------------------------
+function s = ordinal(n,firstupper)
+%ORDINAL Return a string with an ordinal number
+if nargin < 2 || isempty(firstupper); firstupper = 0; end
+
+%ordinal = {'1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th', ...
+%    '11th','12th','13th','14th','15th','16th','17th','18th','19th','20th'};
+
+switch n
+    case 0; s = 'zeroth';
+    case 1; s = 'first';
+    case 2; s = 'second';
+    case 3; s = 'third';
+    case 4; s = 'fourth';
+    case 5; s = 'fifth';
+    case 6; s = 'sixth';
+    case 7; s = 'seventh';
+    case 8; s = 'eighth';
+    case 9; s = 'nineth';
+    case 10; s = 'tenth';
+    otherwise; s = [num2str(n) 'th'];
 end
 if firstupper; s(1) = upper(s(1)); end
 
