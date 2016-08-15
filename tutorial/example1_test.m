@@ -1,8 +1,8 @@
 %% EXAMPLE1 -- Outer product and sum
 
-n = 1e4;
+n = 5e3;
 x = randn(n,1);
-y = randn(1,n);
+y = randn(1,2*n);
 tic; z1 = example1(x,y); t1 = toc; 
 tic; z2 = example1_mex(x,y); t2 = toc;
 

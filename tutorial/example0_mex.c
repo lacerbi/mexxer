@@ -18,13 +18,18 @@
 
 void example0( double *y, double *x, mwSize M, mwSize N )
 {
-	mwSize i,j;
+	mwSize i,j,K;
     
-    for ( i=0; i < M; i++ ) {
-       for ( j=0; j < N; j++ ) {
-            y[i + j*M] = x[i + j*M]*x[i + j*M];
-        }
-    }	
+    //for ( i=0; i < M; i++ ) {
+    //   for ( j=0; j < N; j++ ) {
+    //        y[i + j*M] = x[i + j*M]*x[i + j*M];
+    //    }
+    //}
+    
+    K = M*N;
+    for ( i = 0; i < K; i++, x++ ) {
+        *y++ = (*x) * (*x);
+    }
 	    
 }
 

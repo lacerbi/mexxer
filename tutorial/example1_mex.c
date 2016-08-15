@@ -24,26 +24,11 @@
  * This is a MEX-file for MATLAB.
  */
 
-/* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */
-#define ARGSCHECK 1
-
 void example1( double *z, double *x, double *y, mwSize M, mwSize N )
 {
-	mwSize i,j;
-    double sum, *x0;
+
+    /* ... */
     
-    x0 = x;     /* store initial pointer position */
-    
-    for (i=0; i < M; i++) {
-        sum = 0.;
-        x = x0;
-        for (j=0; j < N; j++) {
-            sum += *(x++) * (*y);
-        }
-        *(z++) = sum;
-        y++;
-    }
-	
 }
 
 /* the gateway function */
