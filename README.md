@@ -14,6 +14,7 @@
 - Bible for MEX files: http://www.mathworks.com/help/matlab/write-cc-mex-files.html
   - C/C++ Matrix Library API: http://www.mathworks.com/help/matlab/cc-matrix-library-api.html
   - Library of example C (and Fortran) files: http://www.mathworks.com/help/matlab/matlab_external/table-of-mex-file-source-code-files.html
+- Basic interactive C course: http://www.learn-c.org/
 
 ### License
 
