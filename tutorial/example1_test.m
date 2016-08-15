@@ -8,5 +8,6 @@ tic; z2 = example1_mex(x,y); t2 = toc;
 
 rmse = sqrt(mean(sum((z1 - z2).^2)));
 
-fprintf('=========================\n\tEXAMPLE 1:\n\tRMSE: %g.\n\tMATLAB time: %.1f ms.\n\tMEX time: %.1f ms.\n\tSpeed gain: %.1f.\n', ...
+fprintf('=========================\n\tEXAMPLE 1:\n');
+fprintf('\tRMSE: %g.\n\tMATLAB time: %.1f ms.\n\tMEX time: %.1f ms.\n\tSpeed gain: %.1f.\n', ...
     rmse, t1*1e3, t2*1e3, t1/t2);
