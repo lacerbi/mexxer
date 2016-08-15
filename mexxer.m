@@ -19,9 +19,9 @@ if nargin < 2 || isempty(overwrite); overwrite = 0; end
 mexxerver = 'v0.1';
 
 % Open input file
-[~,name,ext] = fileparts(filename);
+[filepath,name,ext] = fileparts(filename);
 if isempty(ext); ext = '.m'; end
-filename = [name ext];
+filename = fullfile(filepath,[name,ext]);
 if ~exist(filename,'file')
     error(['File ' filename ' does not exist.']);
 end
@@ -98,7 +98,11 @@ end
 freevars = unique(freevars);
 freevars_defined = zeros(1,numel(freevars));
 
-fileout = [funcname '_mex.c'];
+if ~strcmp(name,funcname)
+    warning(['Function file name ''' name ''' and function name ''' funcname ''' do not match.']);
+end
+
+fileout = fullfile(filepath,[name,'_mex.c']);
 if exist(fileout,'file') && ~overwrite
     error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
 end
@@ -112,7 +116,7 @@ fout = fopen(fileout,'w');
 fprintf(fout, '#include "mex.h"\n#include "math.h"\n#include "matrix.h"\n\n');
 
 % Function definition
-fprintf(fout, ['/*\n * ' fileout '\n *\n']);
+fprintf(fout, ['/*\n * ' [name,'_mex.c'] '\n *\n']);
 for i = 1:numel(desc)
     fprintf(fout, ' *%s\n', desc{i});
 end
