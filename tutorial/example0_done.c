@@ -18,7 +18,7 @@
 
 void example0( double *y, double *x, mwSize M, mwSize N )
 {
-	mwSize i,j;
+	mwSize i,j,K;
     
     /* for ( i=0; i < M; i++ ) {
        for ( j=0; j < N; j++ ) {
