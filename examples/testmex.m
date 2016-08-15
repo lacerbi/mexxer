@@ -13,7 +13,7 @@ function [d_new, d_old] = testmex(sigma, nS, Nnew, Nold, SNew, SOld, X)
 % 
 % ================ OUTPUT VARIABLES ==================
 % D_NEW: log odds of new trials. [Nnew*nS,1,nS] (double)
-% D_OLD: log odds of old trials. [Nold*nS,1] (double)
+% D_OLD: log odds of old trials. [1,1,1] (double)
 %
 
 M = size(SNew,3);   % Number of features

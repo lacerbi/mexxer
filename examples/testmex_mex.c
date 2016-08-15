@@ -19,7 +19,7 @@
  * 
  * ================ OUTPUT VARIABLES ==================
  * D_NEW: log odds of new trials. [Nnew*nS,1,nS] (double)
- * D_OLD: log odds of old trials. [Nold*nS,1] (double)
+ * D_OLD: log odds of old trials. [1,1,1] (double)
  *
  *
  * This is a MEX-file for MATLAB.
@@ -30,7 +30,7 @@
 /* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */
 #define ARGSCHECK 1
 
-void testmex( double *d_new, double *d_old, double sigma, int nS, int Nnew, int Nold, double *SNew, double *SOld, double *X, mwSize M, mwSize TEMP )
+void testmex( double *d_new, double d_old, double sigma, int nS, int Nnew, int Nold, double *SNew, double *SOld, double *X, mwSize M, mwSize TEMP )
 {
 	
 	/* Write your main calculations here... */
@@ -40,7 +40,7 @@ void testmex( double *d_new, double *d_old, double sigma, int nS, int Nnew, int 
 /* the gateway function */
 void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 {
-	double *d_new, *d_old, sigma, *SNew, *SOld, *X;
+	double *d_new, d_old, sigma, *SNew, *SOld, *X;
 	int nS, Nnew, Nold;
 	mwSize *dims_SNew, *dims_SOld, *dims_X, dims_d_new[3];
 	mwSize M, TEMP;
@@ -128,8 +128,8 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 	plhs[0] = mxCreateNumericArray(3, dims_d_new, mxDOUBLE_CLASS, mxREAL);
 	d_new = mxGetPr(plhs[0]);
 
-	/* Pointer to second output (D_OLD, Nold*nS-by-1 double) */
-	plhs[1] = mxCreateDoubleMatrix((mwSize) (Nold*nS), (mwSize) (1), mxREAL);
+	/* Pointer to second output (D_OLD, scalar double) */
+	plhs[1] = mxCreateDoubleScalar(0.);
 	d_old = mxGetPr(plhs[1]);
 
 	/* Call the C subroutine */

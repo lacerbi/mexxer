@@ -55,31 +55,31 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 		mexErrMsgIdAndTxt( "MATLAB:calculate_d:invalidNumOutputs",
 			"Two outputs required.");
 
-	/* Get 1st input (M, scalar int) */
+	/* Get first input (M, scalar int) */
 	M = (int) mxGetScalar(prhs[0]);
 
-	/* Get 2nd input (SIGMA, scalar double) */
+	/* Get second input (SIGMA, scalar double) */
 	sigma = (double) mxGetScalar(prhs[1]);
 
-	/* Get 3rd input (NS, scalar int) */
+	/* Get third input (NS, scalar int) */
 	nS = (int) mxGetScalar(prhs[2]);
 
-	/* Get 4th input (NNEW, scalar int) */
+	/* Get fourth input (NNEW, scalar int) */
 	Nnew = (int) mxGetScalar(prhs[3]);
 
-	/* Get 5th input (NOLD, scalar int) */
+	/* Get fifth input (NOLD, scalar int) */
 	Nold = (int) mxGetScalar(prhs[4]);
 
-	/* Get 6th input (SNEW, Nnew*nS-by-M double) */
+	/* Get sixth input (SNEW, Nnew*nS-by-M double) */
 	SNew = (double*) mxGetPr(prhs[5]);
 
-	/* Get 7th input (SOLD, Nold*nS-by-M double) */
+	/* Get seventh input (SOLD, Nold*nS-by-M double) */
 	SOld = (double*) mxGetPr(prhs[6]);
 
-	/* Get 8th input (X, Nold-by-M double) */
+	/* Get eighth input (X, Nold-by-M double) */
 	X = (double*) mxGetPr(prhs[7]);
 
-	/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip this part) */
+	/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */
 	if ( ARGSCHECK ) {
 		if ( !mxIsDouble(prhs[0]) || mxIsComplex(prhs[0]) || (mxGetN(prhs[0])*mxGetM(prhs[0])!=1) )
 			mexErrMsgIdAndTxt("MATLAB:calculate_d:MNotScalar", "Input M must be a scalar.");
@@ -95,13 +95,37 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 
 		if ( !mxIsDouble(prhs[4]) || mxIsComplex(prhs[4]) || (mxGetN(prhs[4])*mxGetM(prhs[4])!=1) )
 			mexErrMsgIdAndTxt("MATLAB:calculate_d:NoldNotScalar", "Input NOLD must be a scalar.");
+
+		dims_SNew = (mwSize*) mxGetDimensions(prhs[5]);
+		if ( !mxIsDouble(prhs[5]) || mxIsComplex(prhs[5]) )
+				mexErrMsgIdAndTxt("MATLAB:calculate_d:SNewNotReal", "Input SNEW must be real.");
+		if ( dims_SNew[0] != ((mwSize) (Nnew*nS)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:SNewWrongSize", "The first dimension of input SNEW has the wrong size (should be Nnew*nS).");
+		if ( dims_SNew[1] != ((mwSize) (M)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:SNewWrongSize", "The second dimension of input SNEW has the wrong size (should be M).");
+
+		dims_SOld = (mwSize*) mxGetDimensions(prhs[6]);
+		if ( !mxIsDouble(prhs[6]) || mxIsComplex(prhs[6]) )
+				mexErrMsgIdAndTxt("MATLAB:calculate_d:SOldNotReal", "Input SOLD must be real.");
+		if ( dims_SOld[0] != ((mwSize) (Nold*nS)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:SOldWrongSize", "The first dimension of input SOLD has the wrong size (should be Nold*nS).");
+		if ( dims_SOld[1] != ((mwSize) (M)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:SOldWrongSize", "The second dimension of input SOLD has the wrong size (should be M).");
+
+		dims_X = (mwSize*) mxGetDimensions(prhs[7]);
+		if ( !mxIsDouble(prhs[7]) || mxIsComplex(prhs[7]) )
+				mexErrMsgIdAndTxt("MATLAB:calculate_d:XNotReal", "Input X must be real.");
+		if ( dims_X[0] != ((mwSize) (Nold)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:XWrongSize", "The first dimension of input X has the wrong size (should be Nold).");
+		if ( dims_X[1] != ((mwSize) (M)) )
+			mexErrMsgIdAndTxt("MATLAB:calculate_d:XWrongSize", "The second dimension of input X has the wrong size (should be M).");
 	}
 
-	/* Pointer to 1st output (D_NEW, Nnew*nS-by-1 double) */
+	/* Pointer to first output (D_NEW, Nnew*nS-by-1 double) */
 	plhs[0] = mxCreateDoubleMatrix((mwSize) (Nnew*nS), (mwSize) (1), mxREAL);
 	d_new = mxGetPr(plhs[0]);
 
-	/* Pointer to 2nd output (D_OLD, Nold*nS-by-1 double) */
+	/* Pointer to second output (D_OLD, Nold*nS-by-1 double) */
 	plhs[1] = mxCreateDoubleMatrix((mwSize) (Nold*nS), (mwSize) (1), mxREAL);
 	d_old = mxGetPr(plhs[1]);
 

@@ -52,6 +52,8 @@ while 1
     desc{1} = fgetl(fin);
     if ~isemptyline(desc{1}); break; end
 end
+idx = find(desc{end} == '%',1);
+desc{end}(1:idx) = [];
 while 1
     desc{end+1} = fgetl(fin);
     if isemptyline(desc{end}) || all(desc{end} ~= '%'); break; end
@@ -97,10 +99,10 @@ freevars = unique(freevars);
 freevars_defined = zeros(1,numel(freevars));
 
 fileout = [funcname '_mex.c'];
-fout = fopen(fileout,'w');
 if exist(fileout,'file') && ~overwrite
     error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
 end
+fout = fopen(fileout,'w');
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -117,7 +119,7 @@ end
 % fprintf(fout, [' *\n */\n\n']);
 
 % Timestamp and info
-fprintf(fout, ' *\n * This is a MEX-file for MATLAB.\n * Template C code generated on %s with MEXXER %s \n * (https://github.com/lacerbi/mexxer).\n*/\n\n', date, mexxerver);
+fprintf(fout, ' *\n * This is a MEX-file for MATLAB.\n * Template C code generated on %s with MEXXER %s \n * (https://github.com/lacerbi/mexxer).\n */\n\n', date, mexxerver);
 
 % Macros and definitions
 fprintf(fout, '/* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */\n#define ARGSCHECK 1\n\n');
@@ -223,7 +225,7 @@ for i = 1:nrhs
     else
         if first; first = 0; else fprintf(fout,'\n'); end
         if all(rhs(i).getsize == 0)
-            fprintf(fout, '\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+            fprintf(fout, '\t\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
         end
         fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) )\n\t\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotReal", "Input %s must be real.");\n', i-1, i-1, funcname, rhs(i).name, upper(rhs(i).name));
         for k = 1:numel(rhs(i).sizes)
@@ -268,10 +270,6 @@ fprintf(fout, ');\n\n');
 fprintf(fout,'}\n');
 
 fclose(fout);
-
-
-
-
 
 end
 
@@ -344,6 +342,7 @@ end
 
 %--------------------------------------------------------------------------
 function astruct = buildargstruct(alist,asize,atype,section)
+%BUILDARGSTRUCT Build argument structures after parsing from file.
 
 n = numel(alist);
 for i = 1:n
@@ -352,6 +351,13 @@ for i = 1:n
     
     % Scan argument sizes
     temp = regexprep(asize{i},'[\b\f\n\r\t\[\],; ]',' ');
+    while 1
+        idx = unique([strfind(temp,'-by-'),strfind(temp,'-BY-')]);
+        if isempty(idx); break; end
+        temp(idx(1)) = ' ';
+        temp(idx(1)+1:idx(1)+3) = [];
+    end
+        
     errstr = ['Cannot parse ' section ' argument #' num2str(i) ' size in function description.'];
     if isempty(temp); error(errstr); end
     sizes = strread(temp,'%s')';
@@ -466,7 +472,7 @@ switch n
     case 6; s = 'sixth';
     case 7; s = 'seventh';
     case 8; s = 'eighth';
-    case 9; s = 'nineth';
+    case 9; s = 'ninth';
     case 10; s = 'tenth';
     otherwise; s = [num2str(n) 'th'];
 end
