@@ -1,6 +1,9 @@
 #include "mex.h"
 #include "math.h"
 #include "matrix.h"
+#include <thread>
+
+#define NTHREADS 16
 
 /*
  * example2_mex.c
@@ -15,59 +18,48 @@
  * NOLD: number of old words. [scalar] (integer)
  * SNEW: new words across S simulations. [Nnew*nS,M] (double)
  * X: noisy memories. [Nold,M] (double)
- * 
+ *
  * ================ OUTPUT VARIABLES ==================
  * D_NEW: log odds of new trials. [Nnew*nS,1] (double)
  *
  * This is a MEX-file for MATLAB.
  */
 
-void example2( double *d, int M, double sigma, int nS, int Nold, int N, double *S, int Srows, double* X)
-{
-	
-    mwSize i,j,k;
-    double J,Jss,tmp;
-    double *S0,*X0,sum;
-        
-    /* store initial position */
-    S0 = S;     
-        
-    /* Compute d = M/2*log(1+1/sigma^2) + 0.5*sum(SNew.^2,2) */
-            
-/* Compute d = d + log(squeeze(mean(exp( ...
- *        -0.5*J*sum((permute(repmat(SNew,[1,1,Nold]), [3,2,1]) ...
- *                    - repmat(X/J/sigma^2,[1,1,Nnew*nS])).^2,2) ...
- *        )))) */
-    
-    J = 1/(sigma*sigma) + 1;
-    Jss = (1/J)/(sigma*sigma);
-    
-    X0 = X;
-    
-    for (k=0; k < Srows; k++, d++) {
-        *d = 0.;
-        S = S0 + k;
-        
-        for (i=0; i < Nold; i++) {
-            X = X0 + i;
-            
-            sum = 0.;            
-            for (j=0; j < M; j++) {
-                tmp = S[j*Srows] - (X[j*Nold] * Jss);
-                sum += tmp * tmp;
-            }
-            *d += exp(-0.5 * J * sum);
-        }    
-        *d = log( *d / (double) Nold ) + 0.5 * (double) M * log(J);
-
-        S = S0 + k;   /* initialize pointer at current row */
-        for (j=0; j<M; j++) {
-            *d += 0.5 * (*S)*(*S);
-            S += Srows; /* move pointer to next column */
-        }
-        
+void example2(double* St, double* Xt, double* d, const int k, const int Srows, const int Nold, const int M, const double J){
+  double SUM,sum,tmp;
+  for(int l=k;l<Srows;l+=NTHREADS){
+    d[l]=0.5*M*log(J);
+    for(int j=l*M;j<l*M+M;j++)
+      d[l] += 0.5*St[j]*St[j];
+    SUM=0.0;
+    for (int i=0; i < Nold; i++) {
+      sum = 0.0;
+      for (int j=l*M, r=i*M; j < l*M+M; j++,r++)
+        sum -= (St[j] - Xt[r]) * (St[j] - Xt[r]);
+      SUM += exp(0.5 * J * sum);
     }
-        
+    d[l] += log(SUM)-log(Nold);
+  }
+}
+
+void example2_threads( double *d, int M, double sigma, int nS, int Nold, int N, double *S, int Srows, double* X){
+    std::thread t[NTHREADS];
+    double J=1.0/(sigma*sigma) + 1.0;
+    double Jss=(1.0/J)/(sigma*sigma);
+    double *St=new double[Srows*nS];
+    double *Xt=new double[Srows*Nold];
+    for(int i=0;i<Srows;i++)
+      for(int j=0;j<nS;j++)
+        St[i*nS+j]=S[j*Srows+i];
+    for(int i=0;i<Nold;i++)
+      for(int j=0;j<M;j++)
+        Xt[i*M+j]=Jss*X[j*Nold+i];
+    for(int k=0;k<NTHREADS;k++)
+      t[k]=std::thread(example2,S,X,d,k,Srows,Nold,M,J);
+    for(int k=0;k<NTHREADS;k++)
+      t[k].join();
+    delete[] St;
+    delete[] Xt;
 }
 
 /* the gateway function */
@@ -102,6 +94,6 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 	d_new = mxGetPr(plhs[0]);
 
 	/* Call the C subroutine */
-    example2(d_new, M, sigma, nS, Nnew, Nold, SNew, Nnew*nS, X);
+  example2_threads(d_new, M, sigma, nS, Nnew, Nold, SNew, Nnew*nS, X);
 
 }

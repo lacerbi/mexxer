@@ -1,13 +1,12 @@
-function y = example0(x,O)
+function y = example0(x)
 %EXAMPLE0 Return square of an array.
 %  Y = EXAMPLE0(X) takes one array X and computes its square.
 %
 % ================ INPUT VARIABLES ====================
-% 4jio3yi4o3y4jioèjioè34yd.    [M-by-N] (double)
-% ggjwegjewiogjeiogwej [scalar] (int)
+% X: array to be squared.    [M-by-N] (double)
 % 
 % ================ OUTPUT VARIABLES ==================
-% 3jigjig3jwig3jwio   [M,N,O] (double)
+% Y: squared array.          [M-by-N] (double)
 %
-normal_distribution<double>
+
 y = x.^2;

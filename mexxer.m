@@ -174,7 +174,7 @@ for i = 1:nrhs
 end
 for i = 1:nlhs
     n = numel(lhs(i).sizes);
-    if n > 2
+    if n > 1
         if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
         fprintf(fout, '%sdims_%s[%d]', prefix, lhs(i).name, n);
     end
