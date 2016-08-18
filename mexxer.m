@@ -164,17 +164,31 @@ for i = 1:numel(vartypes)
 end
 
 % Add vector arrays for input and output arrays sizes
+fprintf(fout,'#if ( ARGSCHECK==0 )\n');
 first = 1;
 for i = 1:nrhs
     n = numel(rhs(i).sizes);
-    if any(rhs(i).getsize) && n > 1
+    if n > 1 && any(rhs(i).getsize)
         if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
         fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
     end
 end
+fprintf(fout,'#else /* ( ARGSCHECK!=0 ) */ \n');
+first = 1;
+for i = 1:nrhs
+    n = numel(rhs(i).sizes);
+    if n > 1
+        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+        fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
+    end
+end
+if first == 0; fprintf(fout,';\n'); end
+fprintf(fout,'#endif /* ( ARGSCHECK!=0 ) */ \n');
+
+first = 1;
 for i = 1:nlhs
     n = numel(lhs(i).sizes);
-    if n > 1
+    if n > 2
         if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
         fprintf(fout, '%sdims_%s[%d]', prefix, lhs(i).name, n);
     end
@@ -219,7 +233,7 @@ for i = 1:nrhs
 end
 
 % Do input argument checking
-fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */\n\tif ( ARGSCHECK ) {\n');
+fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */\n#if ( ARGSCHECK==1 )\n');
 first = 1;
 for i = 1:nrhs
     if strcmp(rhs(i).sizes{1},'scalar')
@@ -237,7 +251,7 @@ for i = 1:nrhs
         end        
     end
 end
-fprintf(fout,'\t}\n\n');
+fprintf(fout,'#endif /* ( ARGSCHECK==1 ) */ \n\n');
 
 % Prepare outputs and pointers
 for i = 1:nlhs

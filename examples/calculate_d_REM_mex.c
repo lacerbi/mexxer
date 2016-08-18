@@ -28,7 +28,7 @@
  */
 
 /* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */
-#define ARGSCHECK 1
+#define ARGSCHECK 0
 
 void calculate_d_REM( double *d_new, double *d_old, int M, double g, double c, int nS, int Nnew, int Nold, double *SNew, double *SOld, double *X )
 {
@@ -42,7 +42,10 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 {
 	double *d_new, *d_old, g, c, *SNew, *SOld, *X;
 	int M, nS, Nnew, Nold;
-	mwSize dims_d_new[2], dims_d_old[2];
+#if ( ARGSCHECK==0 )
+#else /* ( ARGSCHECK!=0 ) */ 
+	mwSize *dims_SNew, *dims_SOld, *dims_X;
+#endif /* ( ARGSCHECK!=0 ) */ 
 
 	/*  check for proper number of arguments */
 	/* NOTE: You do not need an else statement when using mexErrMsgIdAndTxt
@@ -84,7 +87,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 	X = (double*) mxGetPr(prhs[8]);
 
 	/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */
-	if ( ARGSCHECK ) {
+#if ( ARGSCHECK==1 )
 		if ( !mxIsDouble(prhs[0]) || mxIsComplex(prhs[0]) || (mxGetN(prhs[0])*mxGetM(prhs[0])!=1) )
 			mexErrMsgIdAndTxt("MATLAB:calculate_d_REM:MNotScalar", "Input M must be a scalar.");
 
@@ -126,7 +129,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
 			mexErrMsgIdAndTxt("MATLAB:calculate_d_REM:XWrongSize", "The first dimension of input X has the wrong size (should be Nold).");
 		if ( dims_X[1] != ((mwSize) (M)) )
 			mexErrMsgIdAndTxt("MATLAB:calculate_d_REM:XWrongSize", "The second dimension of input X has the wrong size (should be M).");
-	}
+#endif /* ( ARGSCHECK==1 ) */ 
 
 	/* Pointer to first output (D_NEW, Nnew*nS-by-1 double) */
 	plhs[0] = mxCreateDoubleMatrix((mwSize) (Nnew*nS), (mwSize) (1), mxREAL);
