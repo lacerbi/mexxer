@@ -173,6 +173,7 @@ for i = 1:nrhs
         fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
     end
 end
+if first == 0; fprintf(fout,';\n'); end
 fprintf(fout,'#else /* ( ARGSCHECK!=0 ) */ \n');
 first = 1;
 for i = 1:nrhs
