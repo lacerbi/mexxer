@@ -12,11 +12,11 @@ function [lhs,rhs] = mexxer(filename,overwrite)
 
 %   Author:     Luigi Acerbi
 %   Email:      luigi.acerbi@gmail.com
-%   Version:    14/Aug/2016 (beta)
+%   Version:    21/Aug/2016
 
 if nargin < 2 || isempty(overwrite); overwrite = 0; end
 
-mexxerver = 'v0.1';
+mexxerver = 'v0.2';
 
 % Open input file
 [filepath,name,ext] = fileparts(filename);
