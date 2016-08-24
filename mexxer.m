@@ -1,22 +1,60 @@
-function [lhs,rhs] = mexxer(filename,overwrite)
+function [lhs,rhs] = mexxer(filename,varargin)
 %MEXXER Create template/interface of C code from MATLAB file.
-%   MEXXER(FILENAME) generates C code from .m file FILENAME.
+%   MEXXER(FILENAME) generates C code from .m file FILENAME. MEXXER also 
+%   creates a MATLAB script to test the MATLAB code vs MEX code.
 %
-%   MEXXER(FILENAME,1) overwrites the output file if it already exists.
+%   MEXXER(FILENAME,'mex') only creates the MEX code.
+%   MEXXER(FILENAME,'test') only creates the MATLAB test script.
+%
+%   MEXXER(...,1) overwrites the output file(s) if they already exist.
 
 % Copyright (C) 2016 Luigi Acerbi
 %
 % This software is distributed under the GNU General Public License 
 % (version 3 or later); please refer to the file LICENSE.txt, included with 
 % the software, for details.
-
+%
 %   Author:     Luigi Acerbi
 %   Email:      luigi.acerbi@gmail.com
-%   Version:    21/Aug/2016
-
-if nargin < 2 || isempty(overwrite); overwrite = 0; end
+%   Version:    24/Aug/2016
 
 mexxerver = 'v0.2';
+
+if nargin < 1 && nargout < 1
+    fprintf('MEXXER version %s.\n\n', mexxerver);
+    help mexxer.m; 
+    return; 
+end
+
+% Last variable is overwrite
+if nargin > 1 && isnumeric(varargin{nargin-1}) && isscalar(varargin{nargin-1})
+    overwrite = varargin{nargin-1};
+else
+    overwrite = [];
+end
+if isempty(overwrite); overwrite = 0; end
+
+writemexfun = [];
+writetestfun = [];
+
+if nargin > 1
+    for i = 1:nargin-1
+        if ischar(varargin{i})
+            switch lower(varargin{i})
+                case 'test'; writetestfun = 1; if isempty(writemexfun); writemexfun = 0; end
+                case {'c','c++','mex'}; writemexfun = 1; if isempty(writetestfun); writetestfun = 0; end
+                otherwise
+                    error('mexxer:UnknownType',['Unknown file type ''' varargin{i} '''.']);
+            end
+        end
+    end
+end
+
+if isempty(writemexfun); writemexfun = 1; end
+if isempty(writetestfun); writetestfun = 1; end
+
+% Ensure that all memory is clean
+clear functions; fclose('all');
 
 % Open input file
 [filepath,name,ext] = fileparts(filename);
@@ -69,12 +107,12 @@ rhs_list(1) = [];
 nrhs = numel(rhs_list);
 
 % Parse arguments information from file
-[rhssize,rhstype] = parsevariables(desc,'input',nrhs);
-[lhssize,lhstype] = parsevariables(desc,'output',nlhs);
+[rhssize,rhstype,rhsdesc] = parsevariables(desc,'input',nrhs);
+[lhssize,lhstype,lhsdesc] = parsevariables(desc,'output',nlhs);
 
 % Fill in argument struct
-rhs = buildargstruct(rhs_list,rhssize,rhstype,'input');
-lhs = buildargstruct(lhs_list,lhssize,lhstype,'output');
+rhs = buildargstruct(rhs_list,rhssize,rhstype,rhsdesc,'input');
+lhs = buildargstruct(lhs_list,lhssize,lhstype,lhsdesc,'output');
 allargs = [lhs,rhs];
 
 % Find free variables (input array sizes)
@@ -98,197 +136,304 @@ end
 freevars = unique(freevars);
 freevars_defined = zeros(1,numel(freevars));
 
-if ~strcmp(name,funcname)
-    warning(['Function file name ''' name ''' and function name ''' funcname ''' do not match.']);
-end
-
-fileout = fullfile(filepath,[name,'_mex.c']);
-if exist(fileout,'file') && ~overwrite
-    error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
-end
-fout = fopen(fileout,'w');
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % START WRITING ON FILE
 
-% File header
-fprintf(fout, '#include "mex.h"\n#include "math.h"\n#include "matrix.h"\n\n');
+if writemexfun
 
-% Function definition
-fprintf(fout, ['/*\n * ' [name,'_mex.c'] '\n *\n']);
-for i = 1:numel(desc)
-    fprintf(fout, ' *%s\n', desc{i});
-end
-% fprintf(fout, [' *\n */\n\n']);
-
-% Timestamp and info
-fprintf(fout, ' *\n * This is a MEX-file for MATLAB.\n * Template C code generated on %s with MEXXER %s \n * (https://github.com/lacerbi/mexxer).\n */\n\n', date, mexxerver);
-
-% Macros and definitions
-fprintf(fout, '/* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */\n#define ARGSCHECK 1\n\n');
-
-% Specific function
-fprintf(fout, 'void %s( ',funcname);
-for i = 1:nlhs
-    if i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%s%s %s%s', prefix, lhs(i).type, repmat('*',[1,lhs(i).pointer]), lhs(i).name);
-end
-for i = 1:nrhs
-    if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%s%s %s%s', prefix, rhs(i).type, repmat('*',[1,rhs(i).pointer]), rhs(i).name);
-end
-for i = 1:numel(freevars)
-    if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%smwSize %s', prefix, freevars{i});    
-end
-fprintf(fout,' )\n{\n\t\n\t/* Write your main calculations here... */\n\t\n}\n\n');
-
-% Main function
-fprintf(fout, '/* the gateway function */\n');
-
-fprintf(fout, 'void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )\n{\n');
-
-vartypes = unique({allargs.type});
-for i = 1:numel(vartypes)    
-    fprintf(fout,'\t%s',vartypes{i});
-    first = 1;
-    for j = 1:numel(allargs)
-        if strcmp(allargs(j).type,vartypes{i});
-            pointer = repmat('*',[1,allargs(j).pointer]);
-            if first; first = 0; prefix = ' '; else prefix = ', '; end
-            fprintf(fout,'%s%s%s',prefix,pointer,allargs(j).name);
-        end
+    if ~strcmp(name,funcname)
+        warning(['Function file name ''' name ''' and function name ''' funcname ''' do not match.']);
     end
-    fprintf(fout,';\n');    
-end
 
-% Add vector arrays for input and output arrays sizes
-fprintf(fout,'#if ( ARGSCHECK==0 )\n');
-first = 1;
-for i = 1:nrhs
-    n = numel(rhs(i).sizes);
-    if n > 1 && any(rhs(i).getsize)
-        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
-        fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
+    fileout = fullfile(filepath,[name,'_mex.c']);
+    if exist(fileout,'file') && ~overwrite
+        error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
     end
-end
-if first == 0; fprintf(fout,';\n'); end
-fprintf(fout,'#else /* ( ARGSCHECK!=0 ) */ \n');
-first = 1;
-for i = 1:nrhs
-    n = numel(rhs(i).sizes);
-    if n > 1
-        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
-        fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
+    fout = fopen(fileout,'w');
+
+    % File header
+    fprintf(fout, '#include "mex.h"\n#include "math.h"\n#include "matrix.h"\n\n');
+
+    % Function definition
+    fprintf(fout, ['/*\n * ' [name,'_mex.c'] '\n *\n']);
+    for i = 1:numel(desc)
+        fprintf(fout, ' *%s\n', desc{i});
     end
-end
-if first == 0; fprintf(fout,';\n'); end
-fprintf(fout,'#endif /* ( ARGSCHECK!=0 ) */ \n');
+    % fprintf(fout, [' *\n */\n\n']);
 
-first = 1;
-for i = 1:nlhs
-    n = numel(lhs(i).sizes);
-    if n > 2
-        if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
-        fprintf(fout, '%sdims_%s[%d]', prefix, lhs(i).name, n);
+    % Timestamp and info
+    fprintf(fout, ' *\n * This is a MEX-file for MATLAB.\n * Template C code generated on %s with MEXXER %s \n * (https://github.com/lacerbi/mexxer).\n */\n\n', date, mexxerver);
+
+    % Macros and definitions
+    fprintf(fout, '/* Set ARGSCHECK to 0 to skip argument checking (for minor speedup) */\n#define ARGSCHECK 1\n\n');
+
+    % Specific function
+    fprintf(fout, 'void %s( ',funcname);
+    for i = 1:nlhs
+        if i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%s%s %s%s', prefix, lhs(i).type, repmat('*',[1,lhs(i).pointer]), lhs(i).name);
     end
-end
-if first == 0; fprintf(fout,';\n'); end
+    for i = 1:nrhs
+        if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%s%s %s%s', prefix, rhs(i).type, repmat('*',[1,rhs(i).pointer]), rhs(i).name);
+    end
+    for i = 1:numel(freevars)
+        if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%smwSize %s', prefix, freevars{i});    
+    end
+    fprintf(fout,' )\n{\n\t\n\t/* Write your main calculations here... */\n\t\n}\n\n');
 
-% Free variables (matrix sizes)
-for i = 1:numel(freevars)
-    if i == 1; fprintf(fout, '\tmwSize'); prefix = ' '; else prefix = ', '; end
-    fprintf(fout,'%s%s',prefix,freevars{i});
-    if i == numel(freevars); fprintf(fout, ';\n'); end
-end
-fprintf(fout,'\n');
+    % Main function
+    fprintf(fout, '/* the gateway function */\n');
 
-% Check for number of arguments (this is always done)
-fprintf(fout,'\t/*  check for proper number of arguments */\n\t/* NOTE: You do not need an else statement when using mexErrMsgIdAndTxt\n\t   within an if statement, because it will never get to the else\n\t   statement if mexErrMsgIdAndTxt is executed. (mexErrMsgIdAndTxt breaks\n\t   you out of the MEX-file) */\n');
-fprintf(fout,'\tif ( nrhs<%d || nrhs>%d )\n', nrhs, nrhs); 
-fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumInputs",\n\t\t\t"%s inputs required.");\n', funcname, cardinal(nrhs,1));
-fprintf(fout,'\tif ( nlhs<%d || nlhs>%d )\n', nlhs, nlhs); 
-fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumOutputs",\n\t\t\t"%s outputs required.");\n\n', funcname, cardinal(nlhs,1));
+    fprintf(fout, 'void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )\n{\n');
 
-% Get inputs
-for i = 1:nrhs
-    argdescription(rhs(i),i,'input',fout);
-    if strcmp(rhs(i).sizes{1},'scalar')
-        fprintf(fout,'\t%s = (%s) mxGetScalar(prhs[%d]);\n\n', rhs(i).name, rhs(i).fulltype, i-1);
-    else
-        fprintf(fout,'\t%s = (%s) mxGetPr(prhs[%d]);\n', rhs(i).name, rhs(i).fulltype, i-1);
-        if any(rhs(i).getsize)
-            fprintf(fout, '\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
-            % Check if any free variable needs to be read here
-            for j = 1:numel(rhs(i).vars)
-                if numel(rhs(i).vars{j}) > 1; continue; end
-                idx = find(strcmp(rhs(i).vars{j},freevars),1);
-                if isempty(idx) || freevars_defined(idx); continue; end
-                fprintf(fout, '\t%s = dims_%s[%d];\n', freevars{idx}, rhs(i).name, j-1);
-                freevars_defined(idx) = 1;
+    vartypes = unique({allargs.type});
+    for i = 1:numel(vartypes)    
+        fprintf(fout,'\t%s',vartypes{i});
+        first = 1;
+        for j = 1:numel(allargs)
+            if strcmp(allargs(j).type,vartypes{i});
+                pointer = repmat('*',[1,allargs(j).pointer]);
+                if first; first = 0; prefix = ' '; else prefix = ', '; end
+                fprintf(fout,'%s%s%s',prefix,pointer,allargs(j).name);
             end
         end
-        fprintf(fout,'\n');
+        fprintf(fout,';\n');    
     end
-end
 
-% Do input argument checking
-fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */\n#if ( ARGSCHECK==1 )\n');
-first = 1;
-for i = 1:nrhs
-    if strcmp(rhs(i).sizes{1},'scalar')
-        if first; first = 0; else fprintf(fout,'\n'); end
-        fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) || (mxGetN(prhs[%d])*mxGetM(prhs[%d])!=1) )\n', i-1, i-1, i-1, i-1);
-        fprintf(fout,'\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotScalar", "Input %s must be a scalar.");\n', funcname, rhs(i).name, upper(rhs(i).name));
-    else
-        if first; first = 0; else fprintf(fout,'\n'); end
-        if all(rhs(i).getsize == 0)
-            fprintf(fout, '\t\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+    % Add vector arrays for input and output arrays sizes
+    fprintf(fout,'#if ( ARGSCHECK==0 )\n');
+    first = 1;
+    for i = 1:nrhs
+        n = numel(rhs(i).sizes);
+        if n > 1 && any(rhs(i).getsize)
+            if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+            fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
         end
-        fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) )\n\t\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotReal", "Input %s must be real.");\n', i-1, i-1, funcname, rhs(i).name, upper(rhs(i).name));
-        for k = 1:numel(rhs(i).sizes)
-            fprintf(fout,'\t\tif ( dims_%s[%d] != ((mwSize) (%s)) )\n\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sWrongSize", "The %s dimension of input %s has the wrong size (should be %s).");\n', rhs(i).name, k-1, rhs(i).sizes{k}, funcname, rhs(i).name, ordinal(k), upper(rhs(i).name), rhs(i).sizes{k});
-        end        
     end
-end
-fprintf(fout,'#endif /* ( ARGSCHECK==1 ) */ \n\n');
-
-% Prepare outputs and pointers
-for i = 1:nlhs
-    argdescription(lhs(i),i,'output',fout);
-    n = numel(lhs(i).sizes);
-    switch n
-        case 1
-            fprintf(fout,'\tplhs[%d] = mxCreateDoubleScalar(0.);\n', i-1);            
-        case 2
-            fprintf(fout,'\tplhs[%d] = mxCreateDoubleMatrix((mwSize) (%s), (mwSize) (%s), mxREAL);\n', i-1, lhs(i).sizes{1}, lhs(i).sizes{2});
-        case 3
-            for j = 1:n; fprintf(fout, '\tdims_%s[%d] = (mwSize) (%s);\n', lhs(i).name, j-1, lhs(i).sizes{j}); end
-            fprintf(fout,'\tplhs[%d] = mxCreateNumericArray(%d, dims_%s, mxDOUBLE_CLASS, mxREAL);\n', i-1, n, lhs(i).name);
+    if first == 0; fprintf(fout,';\n'); end
+    fprintf(fout,'#else /* ( ARGSCHECK!=0 ) */ \n');
+    first = 1;
+    for i = 1:nrhs
+        n = numel(rhs(i).sizes);
+        if n > 1
+            if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+            fprintf(fout, '%s*dims_%s', prefix, rhs(i).name);
+        end
     end
-    fprintf(fout,'\t%s = mxGetPr(plhs[%d]);\n\n', lhs(i).name, i-1);
+    if first == 0; fprintf(fout,';\n'); end
+    fprintf(fout,'#endif /* ( ARGSCHECK!=0 ) */ \n');
+
+    first = 1;
+    for i = 1:nlhs
+        n = numel(lhs(i).sizes);
+        if n > 2
+            if first; fprintf(fout, '\tmwSize'); first = 0; prefix = ' '; else prefix = ', '; end
+            fprintf(fout, '%sdims_%s[%d]', prefix, lhs(i).name, n);
+        end
+    end
+    if first == 0; fprintf(fout,';\n'); end
+
+    % Free variables (matrix sizes)
+    for i = 1:numel(freevars)
+        if i == 1; fprintf(fout, '\tmwSize'); prefix = ' '; else prefix = ', '; end
+        fprintf(fout,'%s%s',prefix,freevars{i});
+        if i == numel(freevars); fprintf(fout, ';\n'); end
+    end
+    fprintf(fout,'\n');
+
+    % Check for number of arguments (this is always done)
+    fprintf(fout,'\t/*  check for proper number of arguments */\n\t/* NOTE: You do not need an else statement when using mexErrMsgIdAndTxt\n\t   within an if statement, because it will never get to the else\n\t   statement if mexErrMsgIdAndTxt is executed. (mexErrMsgIdAndTxt breaks\n\t   you out of the MEX-file) */\n');
+    fprintf(fout,'\tif ( nrhs<%d || nrhs>%d )\n', nrhs, nrhs); 
+    fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumInputs",\n\t\t\t"%s inputs required.");\n', funcname, cardinal(nrhs,1));
+    fprintf(fout,'\tif ( nlhs<%d || nlhs>%d )\n', nlhs, nlhs); 
+    fprintf(fout,'\t\tmexErrMsgIdAndTxt( "MATLAB:%s:invalidNumOutputs",\n\t\t\t"%s outputs required.");\n\n', funcname, cardinal(nlhs,1));
+
+    % Get inputs
+    for i = 1:nrhs
+        argdescription(rhs(i),i,'input',fout);
+        if strcmp(rhs(i).sizes{1},'scalar')
+            fprintf(fout,'\t%s = (%s) mxGetScalar(prhs[%d]);\n\n', rhs(i).name, rhs(i).fulltype, i-1);
+        else
+            fprintf(fout,'\t%s = (%s) mxGetPr(prhs[%d]);\n', rhs(i).name, rhs(i).fulltype, i-1);
+            if any(rhs(i).getsize)
+                fprintf(fout, '\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+                % Check if any free variable needs to be read here
+                for j = 1:numel(rhs(i).vars)
+                    if numel(rhs(i).vars{j}) > 1; continue; end
+                    idx = find(strcmp(rhs(i).vars{j},freevars),1);
+                    if isempty(idx) || freevars_defined(idx); continue; end
+                    fprintf(fout, '\t%s = dims_%s[%d];\n', freevars{idx}, rhs(i).name, j-1);
+                    freevars_defined(idx) = 1;
+                end
+            end
+            fprintf(fout,'\n');
+        end
+    end
+
+    % Do input argument checking
+    fprintf(fout,'\t/* Check sizes of input arguments (define ARGSCHECK to 0 above to skip) */\n#if ( ARGSCHECK==1 )\n');
+    first = 1;
+    for i = 1:nrhs
+        if strcmp(rhs(i).sizes{1},'scalar')
+            if first; first = 0; else fprintf(fout,'\n'); end
+            fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) || (mxGetN(prhs[%d])*mxGetM(prhs[%d])!=1) )\n', i-1, i-1, i-1, i-1);
+            fprintf(fout,'\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotScalar", "Input %s must be a scalar.");\n', funcname, rhs(i).name, upper(rhs(i).name));
+        else
+            if first; first = 0; else fprintf(fout,'\n'); end
+            if all(rhs(i).getsize == 0)
+                fprintf(fout, '\t\tdims_%s = (mwSize*) mxGetDimensions(prhs[%d]);\n', rhs(i).name, i-1);
+            end
+            fprintf(fout,'\t\tif ( !mxIsDouble(prhs[%d]) || mxIsComplex(prhs[%d]) )\n\t\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sNotReal", "Input %s must be real.");\n', i-1, i-1, funcname, rhs(i).name, upper(rhs(i).name));
+            for k = 1:numel(rhs(i).sizes)
+                fprintf(fout,'\t\tif ( dims_%s[%d] != ((mwSize) (%s)) )\n\t\t\tmexErrMsgIdAndTxt("MATLAB:%s:%sWrongSize", "The %s dimension of input %s has the wrong size (should be %s).");\n', rhs(i).name, k-1, rhs(i).sizes{k}, funcname, rhs(i).name, ordinal(k), upper(rhs(i).name), rhs(i).sizes{k});
+            end        
+        end
+    end
+    fprintf(fout,'#endif /* ( ARGSCHECK==1 ) */ \n\n');
+
+    % Prepare outputs and pointers
+    for i = 1:nlhs
+        argdescription(lhs(i),i,'output',fout);
+        n = numel(lhs(i).sizes);
+        switch n
+            case 1
+                fprintf(fout,'\tplhs[%d] = mxCreateDoubleScalar(0.);\n', i-1);            
+            case 2
+                fprintf(fout,'\tplhs[%d] = mxCreateDoubleMatrix((mwSize) (%s), (mwSize) (%s), mxREAL);\n', i-1, lhs(i).sizes{1}, lhs(i).sizes{2});
+            case 3
+                for j = 1:n; fprintf(fout, '\tdims_%s[%d] = (mwSize) (%s);\n', lhs(i).name, j-1, lhs(i).sizes{j}); end
+                fprintf(fout,'\tplhs[%d] = mxCreateNumericArray(%d, dims_%s, mxDOUBLE_CLASS, mxREAL);\n', i-1, n, lhs(i).name);
+        end
+        fprintf(fout,'\t%s = mxGetPr(plhs[%d]);\n\n', lhs(i).name, i-1);
+    end
+
+    % Call subroutine
+    fprintf(fout, '\t/* Call the C subroutine */\n\t%s(', funcname);
+    for i = 1:nlhs
+        if i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%s%s', prefix, lhs(i).name);
+    end
+    for i = 1:nrhs
+        if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%s%s', prefix, rhs(i).name);
+    end
+    for i = 1:numel(freevars)
+        if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
+        fprintf(fout, '%s%s', prefix, freevars{i});    
+    end
+    fprintf(fout, ');\n\n');
+
+    fprintf(fout,'}\n');
+
+    fclose(fout);
 end
 
-% Call subroutine
-fprintf(fout, '\t/* Call the C subroutine */\n\t%s(', funcname);
-for i = 1:nlhs
-    if i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%s%s', prefix, lhs(i).name);
-end
-for i = 1:nrhs
-    if nlhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%s%s', prefix, rhs(i).name);
-end
-for i = 1:numel(freevars)
-    if nlhs > 0 || nrhs > 0 || i > 1; prefix = ', '; else prefix = ''; end
-    fprintf(fout, '%s%s', prefix, freevars{i});    
-end
-fprintf(fout, ');\n\n');
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TEST FUNCTION
 
-fprintf(fout,'}\n');
+if writetestfun
 
-fclose(fout);
+    fileout = fullfile(filepath,[name,'_test.m']);
+    if exist(fileout,'file') && ~overwrite
+        error([fileout ' already exists. Call MEXXER(FILENAME,1) if you want to overwrite an existing file (be careful).']);
+    end
+    fout = fopen(fileout,'w');
+
+    % Timestamp and info
+    fprintf(fout, '%%%s\n%%   Test script for MEX-file %s.\n%%\n', upper([name '_test']), name);
+    fprintf(fout, '%%   Template MATLAB code generated on %s with MEXXER %s \n%%   (https://github.com/lacerbi/mexxer).\n\n', date, mexxerver);
+    
+    % Default parameters
+    fprintf(fout, 'TolErr = sqrt(eps);\t%% Maximum error tolerance per array element\n\n');
+    
+    % Initialize sizes
+    fprintf(fout, '%% Define array sizes (choose reasonable values)\n');
+    vars = [];
+    for i = 1:numel(rhs)
+        if ~isempty(rhs(i).vars); vars = [vars, rhs(i).vars{:}]; end
+    end
+    vars = unique(vars);
+    for i = 1:numel(vars)
+        fprintf(fout, '%s = %d;\n', vars{i}, 50 + 50*i);
+    end
+
+    % Randomly initialize variables
+    fprintf(fout, '\n%% Randomly initialize input variables\n%% (or write here alternative initializations)\n');
+    for i = 1:numel(rhs)
+        % Skip variables if already initialized
+        if any(strcmp(rhs(i).name,vars)); continue; end
+
+        switch rhs(i).type
+            % case 'double'
+            case 'int'; rngmethod = 'randi(10,';
+            otherwise; rngmethod = '10*rand(';
+        end
+        fprintf(fout, '%s = %s[', rhs(i).name, rngmethod);
+        if numel(rhs(i).sizes) == 1
+            fprintf(fout,'1,1');
+        else    
+            fprintf(fout,'%s',rhs(i).sizes{1});
+            for j = 2:numel(rhs(i).sizes)
+                fprintf(fout,',%s',rhs(i).sizes{j});
+            end
+        end
+        fprintf(fout,']);\t%%%s\n',rhs(i).desc);  
+    end
+
+    basestring = ['Testing ' name ':'];
+    fprintf(fout,'\nfprintf(''%s\\n'');\n',repmat('=',[1,numel(basestring)]));
+    fprintf(fout,'fprintf(''%s\\n'');\n', basestring);
+    fprintf(fout,'fprintf(''%s\\n'');\n',repmat('=',[1,numel(basestring)]));
+
+    fprintf(fout,'\n%% Call MATLAB and MEX functions\n');
+
+    % Call MATLAB function
+    fprintf(fout,'tic; ');
+    if numel(lhs) > 0
+        fprintf(fout,'[%s', lhs(1).name);
+        for i = 2:numel(lhs); fprintf(fout,',%s', lhs(i).name); end
+        fprintf(fout,'] = ');
+    end
+    fprintf(fout,'%s(',name);
+    if numel(rhs) > 0
+        fprintf(fout,'%s', rhs(1).name);
+        for i = 2:numel(rhs); fprintf(fout,',%s', rhs(i).name); end
+    end
+    fprintf(fout,'); t = toc;\n');
+
+    % Call MEX function
+    fprintf(fout,'tic; ');
+    if numel(lhs) > 0
+        fprintf(fout,'[%s_mex', lhs(1).name);
+        for i = 2:numel(lhs); fprintf(fout,',%s_mex', lhs(i).name); end
+        fprintf(fout,'] = ');
+    end
+    fprintf(fout,'%s_mex(',name);
+    if numel(rhs) > 0
+        fprintf(fout,'%s', rhs(1).name);
+        for i = 2:numel(rhs); fprintf(fout,',%s', rhs(i).name); end
+    end
+    fprintf(fout,'); t_mex = toc;\n\n');
+
+    fprintf(fout,'%% Correctness check\n');
+    for i = 1:numel(lhs)
+        fprintf(fout, '%s_err = sum(abs(%s(:)-%s_mex(:)));\n', lhs(i).name, lhs(i).name, lhs(i).name);
+        fprintf(fout, ...
+            'fprintf(''Total error (%s): %%g\\n'', %s_err);\n', ...
+            lhs(i).name, lhs(i).name);
+        fprintf(fout,'if %s_err > TolErr*numel(%s);\n\terror(''mexxer:tooLargeError'',''Correctness check failed. Error too large in %s.'');\nend\n', lhs(i).name, lhs(i).name, lhs(i).name);
+    end
+
+    fprintf(fout,'\n%% Runtime analysis\n');
+    fprintf(fout,'fprintf(''Time for MATLAB code: %%.3f s\\n'', t);\n');
+    fprintf(fout,'fprintf(''Time for MEX file: %%.3f s\\n'', t_mex);\n');
+    fprintf(fout,'fprintf(''Speed gain: %%.2f\\n'', t/t_mex);\n');
+
+
+    fclose(fout);
+end
 
 end
 
@@ -306,11 +451,12 @@ tf = isfinite(idx);
 end
 
 %--------------------------------------------------------------------------
-function [varsize,vartype] = parsevariables(desc,section,nvars)
+function [varsize,vartype,vardesc] = parsevariables(desc,section,nvars)
 %PARSEVARIABLES Parse argument description for size and type.
 
 varsize = [];
 vartype = [];
+vardesc = [];
 
 % Parse variables
 found = 0;
@@ -350,6 +496,9 @@ if found
         end        
         vartype{ivars} = line(idx1:idx2);
         
+        % Find description, until last round/square bracket
+        idx2 = min(find(line == '(',1,'last'),find(line == '[',1,'last'))-1;
+        vardesc{ivars} = line(1:idx2);
     end
 end
 
@@ -360,7 +509,7 @@ end
 end
 
 %--------------------------------------------------------------------------
-function astruct = buildargstruct(alist,asize,atype,section)
+function astruct = buildargstruct(alist,asize,atype,adesc,section)
 %BUILDARGSTRUCT Build argument structures after parsing from file.
 
 n = numel(alist);
@@ -427,6 +576,7 @@ for i = 1:n
     end
     astruct(i).fulltype = [astruct(i).type repmat('*',[1,astruct(i).pointer])];
     
+    astruct(i).desc = strtrim(adesc{i});
 end
 
 end
