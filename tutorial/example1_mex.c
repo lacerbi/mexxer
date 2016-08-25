@@ -27,7 +27,6 @@
 void example1( double *z, double *x, double *y, mwSize M, mwSize N )
 {
     mwSize i,j;
-    double sum;
     
     for (j=0; j<N; j++) {
         z[j] = 0.0;
