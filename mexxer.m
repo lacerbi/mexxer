@@ -152,7 +152,7 @@ if writemexfun
     fout = fopen(fileout,'w');
 
     % File header
-    fprintf(fout, '#include "mex.h"\n#include "math.h"\n#include "matrix.h"\n\n');
+    fprintf(fout, '#include "mex.h"\n#include "math.h"\n#include "matrix.h"\n#include "float.h"\n\n');
 
     % Function definition
     fprintf(fout, ['/*\n * ' [name,'_mex.c'] '\n *\n']);
