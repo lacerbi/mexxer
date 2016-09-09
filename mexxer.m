@@ -302,7 +302,7 @@ if writemexfun
                 fprintf(fout,'\tplhs[%d] = mxCreateDoubleScalar(0.);\n', i-1);            
             case 2
                 fprintf(fout,'\tplhs[%d] = mxCreateDoubleMatrix((mwSize) (%s), (mwSize) (%s), mxREAL);\n', i-1, lhs(i).sizes{1}, lhs(i).sizes{2});
-            case 3
+            otherwise
                 for j = 1:n; fprintf(fout, '\tdims_%s[%d] = (mwSize) (%s);\n', lhs(i).name, j-1, lhs(i).sizes{j}); end
                 fprintf(fout,'\tplhs[%d] = mxCreateNumericArray(%d, dims_%s, mxDOUBLE_CLASS, mxREAL);\n', i-1, n, lhs(i).name);
         end
