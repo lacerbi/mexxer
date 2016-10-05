@@ -13,13 +13,12 @@ Template/interface generator for C code from MATLAB functions.
 
 #### Mac OS X
 
-  - Install Command Line Tools: In Terminal, enter `xcode-select --install` and install.
-  - Configure MATLAB
-        - In MATLAB, enter `mex -setup` to see if MEX is configured. 
-        - If it is not, enter `edit ([matlabroot '/bin/maci64/mexopts/clang++_maci64.xml'])`. If you are running MacOS 10.11, find and replace all instances of '10.10' with '10.11'. Presumably, you should be able to do this in MacOS 10.12 as well.
-        - Enter `edit ([matlabroot '/bin/maci64/mexopts/clang_maci64.xml'])` and do the same.
-
-Now, restart MATLAB, and try `mex -setup` again. It should indicate that it's properly configured.
+  - **Install Command Line Tools:** In Terminal, enter `xcode-select --install` and install.
+  - **Configure MATLAB:**
+    - In MATLAB, enter `mex -setup` to see if MEX is configured. 
+    - If it is not, enter `edit ([matlabroot '/bin/maci64/mexopts/clang++_maci64.xml'])`. If you are running MacOS 10.11, find and replace all instances of '10.10' with '10.11'. Presumably, you should be able to do this in MacOS 10.12 as well.
+    - Enter `edit ([matlabroot '/bin/maci64/mexopts/clang_maci64.xml'])` and do the same.
+    - Now, restart MATLAB, and try `mex -setup` again. It should indicate that it's properly configured.
 
 ### References
 
