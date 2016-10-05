@@ -20,6 +20,8 @@ Template/interface generator for C code from MATLAB functions.
     - Enter `edit ([matlabroot '/bin/maci64/mexopts/clang_maci64.xml'])` and do the same.
     - Now, restart MATLAB, and try `mex -setup` again. It should indicate that it's properly configured.
 
+(*OS X configuration instructions courtesy of [Will T. Adler](https://github.com/wtadler?tab=activity)*.)
+
 ### References
 
 - Bible for MEX files: http://www.mathworks.com/help/matlab/write-cc-mex-files.html
