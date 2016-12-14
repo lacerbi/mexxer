@@ -2,12 +2,25 @@
 
 Template/interface generator for C code from MATLAB functions.
 
-### How to make MEX work on your computer
+### Configuring a MEX compiler in MATLAB
 
 - List of compatible C compilers: http://www.mathworks.com/support/compilers/R2016a/index.html
-- Installing a compiler that MATLAB likes can be hard.
-  - If you have Windows, you can try with following the instructions [here](https://www.mathworks.com/matlabcentral/answers/101105-how-do-i-install-microsoft-windows-sdk-7-1). Several things can go wrong; see [here](https://www.mathworks.com/matlabcentral/answers/95039-why-does-the-sdk-7-1-installation-fail-with-an-installation-failed-message-on-my-windows-system) for some troubleshooting.
-  - As an alternative for Windows users, if you already have a C compiler that you want MATLAB to recognize, download [this script](https://github.com/lacerbi/mexxer/blob/master/mexopts.bat) provided by Bas van Opheusden and follow his instructions: "After downloading this file, move it to *C:\Users\yourusername\AppData\Roaming\MathWorks\MATLAB\yourmatlabversion\*. This folder is hidden but it does exist. Then you'll need to edit the name of the compiler and its path in the mexopts.bat script (lines 5,7, and 13)."
+
+#### Windows
+
+  - You can try with following the instructions [here](https://www.mathworks.com/matlabcentral/answers/101105-how-do-i-install-microsoft-windows-sdk-7-1). Several things can go wrong; see [here](https://www.mathworks.com/matlabcentral/answers/95039-why-does-the-sdk-7-1-installation-fail-with-an-installation-failed-message-on-my-windows-system) for some troubleshooting.
+  - As an alternative, if you already have a C compiler that you want MATLAB to recognize, download [this script](https://github.com/lacerbi/mexxer/blob/master/mexopts.bat) provided by Bas van Opheusden and follow his instructions: "After downloading this file, move it to *C:\Users\yourusername\AppData\Roaming\MathWorks\MATLAB\yourmatlabversion\*. This folder is hidden but it does exist. Then you'll need to edit the name of the compiler and its path in the mexopts.bat script (lines 5,7, and 13)."
+
+#### Mac OS X
+
+  - **Install Command Line Tools:** In Terminal, enter `xcode-select --install` and install.
+  - **Configure MATLAB:**
+    - In MATLAB, enter `mex -setup` to see if MEX is configured. 
+    - If it is not, enter `edit ([matlabroot '/bin/maci64/mexopts/clang++_maci64.xml'])`. If you are running MacOS 10.11, find and replace all instances of '10.10' with '10.11'. Presumably, you should be able to do this in MacOS 10.12 as well.
+    - Enter `edit ([matlabroot '/bin/maci64/mexopts/clang_maci64.xml'])` and do the same.
+    - Now, restart MATLAB, and try `mex -setup` again. It should indicate that it's properly configured.
+
+(*OS X configuration instructions courtesy of [Will T. Adler](https://github.com/wtadler?tab=activity)*.)
 
 ### References
 
